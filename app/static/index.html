@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Roundabout: Hierarchical Federated Learning for Traffic</title>
+<style>
+/* ==========================================================================
+   DESIGN SYSTEM
+   Colour: 60% sand (ground) · 30% deep teal (structure, primary actions)
+           · 10% terracotta (emphasis, hierarchical method, highlights)
+   Neutrals are ink tints only. No other hues are used anywhere.
+   ========================================================================== */
+:root{
+  --sand:#F4EDE1;
+  --sand-2:#EAE0CE;
+  --paper:#FBF8F2;
+  --teal:#1E4D52;
+  --teal-2:#3E7074;
+  --teal-3:#8FB3B4;
+  --terra:#C4572E;
+  --terra-2:#A8431F;
+  --ink:#23211E;
+  --ink-2:rgba(35,33,30,.68);
+  --ink-3:rgba(35,33,30,.46);
+  --line:rgba(30,77,82,.14);
+  --shadow:0 1px 2px rgba(35,33,30,.05),0 14px 34px -20px rgba(30,77,82,.28);
+  --r:16px;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --bg:var(--sand);--rust:var(--terra);--navy:var(--teal);--mut:var(--ink-2);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--sand);color:var(--ink);font:400 17px/1.62 var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+::selection{background:var(--teal);color:var(--sand)}
+h1,h2,h3{font-family:var(--serif);color:var(--teal);margin:0;font-weight:600;letter-spacing:-.01em}
+h1{font-size:clamp(44px,6.4vw,84px);line-height:1.02}
+h2{font-size:clamp(30px,3.6vw,46px);line-height:1.1;margin-bottom:10px}
+h3{font-size:21px;line-height:1.25;margin-bottom:8px}
+p{margin:0}
+b{font-weight:650}
+code{font:500 14px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--sand-2);padding:2px 6px;border-radius:6px;color:var(--teal)}
+pre{background:var(--sand-2);padding:12px;overflow:auto;font-size:13px;border-radius:10px}
+.mut{color:var(--ink-2);font-size:15.5px}
+.eb{font:600 12px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--terra);margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.eb:before{content:"";width:22px;height:2px;background:var(--terra);border-radius:2px}
+button,select,input{font:inherit;color:inherit}
+
+/* ---------- layout ---------- */
+#app{display:block}
+#rail{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:14px 5vw;background:rgba(244,237,225,.86);-webkit-backdrop-filter:saturate(1.2) blur(12px);backdrop-filter:saturate(1.2) blur(12px);border-bottom:1px solid var(--line)}
+#rail>b{font:700 13px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin-right:10px}
+#rail button{width:auto;border:0;background:none;padding:8px 10px;border-radius:999px;font:500 14px/1 var(--sans);color:var(--ink-2);cursor:pointer;transition:color .2s,background .2s}
+#rail button:hover{color:var(--teal);background:rgba(30,77,82,.07)}
+#rail button.on{color:var(--sand);background:var(--teal)}
+main{max-width:none;padding:0;animation:none;position:relative;z-index:1}
+.sec{min-height:100vh;display:flex;align-items:center;padding:120px 0 90px;border-bottom:1px solid var(--line);opacity:0;transform:translateY(48px);transition:opacity 1s cubic-bezier(.2,.7,.2,1),transform 1.1s cubic-bezier(.2,.7,.2,1)}
+.sec.in{opacity:1;transform:none}
+.sec .wrap{width:100%;max-width:1120px;margin:0 auto;padding:0 5vw}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0}
+
+/* ---------- surfaces ---------- */
+.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:26px 28px;margin:16px 0;box-shadow:var(--shadow)}
+.card h3{margin-bottom:10px}
+.note{border-radius:12px;background:#EEE6D5;color:var(--ink);padding:14px 18px;margin:14px 0;font-size:15px;border-left:3px solid var(--teal)}
+.note.bad{background:#F2DDD1;border-left-color:var(--terra)}
+.note.good{background:#DCE7E4;border-left-color:var(--teal)}
+.stat{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.stat b{display:block;font:650 17px/1.35 var(--sans);color:var(--teal);margin-bottom:4px}
+.stat span{font-size:13px;color:var(--ink-2)}
+.stat.hot{border-color:var(--terra);background:#FBF1EA}
+.stat.hot b{color:var(--terra-2)}
+.state{border:1px dashed rgba(30,77,82,.3);border-radius:var(--r);padding:34px;text-align:center;background:rgba(251,248,242,.6)}
+.state b{font:600 20px/1.3 var(--serif);color:var(--teal);display:block;margin-bottom:6px}
+.eq{font:500 14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--sand-2);padding:14px 18px;margin:12px 0;border-radius:12px;color:var(--teal);overflow-x:auto}
+
+/* ---------- controls ---------- */
+.btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--teal);background:transparent;color:var(--teal);padding:11px 20px;border-radius:999px;font:600 15px/1 var(--sans);cursor:pointer;transition:transform .2s,background .2s,color .2s,box-shadow .2s;text-decoration:none}
+.btn:hover{background:rgba(30,77,82,.08);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.p{background:var(--teal);color:var(--sand);border-color:var(--teal);box-shadow:0 10px 24px -12px rgba(30,77,82,.6)}
+.btn.p:hover{background:var(--teal-2);border-color:var(--teal-2)}
+.btn.big{padding:16px 30px;font-size:16px}
+.btn:disabled{opacity:.42;cursor:default;transform:none}
+.btn:focus-visible,#rail button:focus-visible,select:focus-visible,input:focus-visible,.tabs button:focus-visible{outline:2px solid var(--terra);outline-offset:3px}
+.tabs{display:inline-flex;flex-wrap:wrap;background:var(--sand-2);border-radius:999px;padding:4px;gap:2px}
+.tabs button{border:0;background:none;padding:8px 16px;border-radius:999px;cursor:pointer;font:500 14px/1 var(--sans);color:var(--ink-2);transition:background .2s,color .2s}
+.tabs button.on{background:var(--paper);color:var(--teal);box-shadow:0 1px 2px rgba(35,33,30,.08)}
+.field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-2)}
+.field select,.field input{padding:10px 12px;border:1px solid rgba(30,77,82,.25);background:var(--paper);border-radius:10px}
+input[type=range]{accent-color:var(--teal);width:100%}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:14.5px;font-variant-numeric:tabular-nums}
+th,td{padding:10px 10px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font:600 12px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+tr.hl td{font-weight:650;color:var(--terra-2)}
+tbody tr:hover td{background:rgba(30,77,82,.04)}
+.card+h3,.card+h2{margin-top:30px}
+
+/* ---------- chapter 6 ---------- */
+.zr{display:grid;grid-template-columns:110px 1fr 110px 96px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.zr:last-child{border-bottom:0}
+.zr .zb{height:10px;background:var(--sand-2);border-radius:999px;overflow:hidden}
+.zr .zb i{display:block;height:100%;background:var(--teal);border-radius:999px}
+.zr b{font-variant-numeric:tabular-nums;text-align:right;color:var(--teal)}
+.zr em{font:600 12px/1 var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--terra-2);font-style:normal;text-align:right}
+.sb{display:grid;grid-template-columns:150px 1fr 70px 70px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.sb:last-child{border-bottom:0}
+.sb .bar{height:12px;background:var(--sand-2);border-radius:999px;overflow:hidden}
+.sb .bar i{display:block;height:100%;border-radius:999px}
+.sb b,.sb span{font-variant-numeric:tabular-nums;text-align:right}
+.sb.hl{color:var(--terra-2);font-weight:650}
+.sb .tag{font:600 11px/1 var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{font:600 13px/1 var(--sans);padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--ink-2)}
+.chip.ok{background:#DCE7E4;border-color:var(--teal);color:var(--teal)}
+.chip.no{background:#F2DDD1;border-color:var(--terra);color:var(--terra-2)}
+.verdict{border-radius:var(--r);padding:30px 32px;margin:18px 0;background:var(--teal);color:var(--sand)}
+.verdict h3{color:var(--sand);font-size:clamp(24px,2.6vw,32px);margin-bottom:12px}
+.verdict p{color:rgba(244,237,225,.86);font-size:16px}
+.verdict.warn{background:#fff;border:2px solid var(--terra)}
+.verdict.warn h3{color:var(--terra-2)}
+.verdict.warn p{color:var(--ink-2)}
+
+/* ---------- hero ---------- */
+.hero-wrap{position:relative;min-height:calc(100vh - 80px)}
+.hero-wrap:before{content:"";position:absolute;inset:-60px -12vw -60px -8vw;background:radial-gradient(ellipse at 28% 46%,rgba(244,237,225,.97) 0%,rgba(244,237,225,.9) 42%,rgba(244,237,225,0) 72%);z-index:-1;pointer-events:none}
+.hero-kicker{font:600 13px/1 var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--terra);margin-bottom:22px}
+.hero-sub{font:400 clamp(20px,2.1vw,26px)/1.42 var(--serif);color:var(--teal);max-width:760px;margin-top:20px}
+.hero-lede{max-width:640px;margin-top:18px;font-size:18px;color:var(--ink-2)}
+.hero-stats{display:flex;flex-wrap:wrap;gap:34px;margin-top:54px}
+.hero-stats div{border-left:2px solid var(--terra);padding-left:14px}
+.hero-stats b{display:block;font:600 34px/1 var(--serif);color:var(--teal)}
+.hero-stats span{font-size:13px;color:var(--ink-2)}
+.hero-cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:38px}
+.scroll-cue{margin-top:70px;font-size:13px;color:var(--ink-3);display:flex;align-items:center;gap:10px}
+.scroll-cue:after{content:"";width:1px;height:38px;background:linear-gradient(var(--terra),transparent);animation:cue 2.2s ease-in-out infinite}
+@keyframes cue{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+/* ---------- background traffic ---------- */
+#bgv{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none;opacity:.5}
+
+@media (max-width:860px){
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .sec{padding:100px 0 60px}
+  #rail{padding:10px 4vw;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  #rail::-webkit-scrollbar{display:none}
+  #rail button,#rail>b{flex:none}
+  .card{padding:20px}
+  .zr{grid-template-columns:80px 1fr 84px;}
+  .zr em{display:none}
+  .sb{grid-template-columns:96px 1fr 58px;}
+  .sb .wn{display:none}
+  .verdict{padding:22px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .sec{opacity:1;transform:none;transition:none}
+  .scroll-cue:after{animation:none}
+}
+
+#rail{transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+#rail.hide{transform:translateY(-110%)}
+</style></head><body>
+<canvas id="bgv" aria-hidden="true"></canvas>
+<div id="app"><nav id="rail"></nav><main id="main"></main></div>
+<script>
+/* The backend serves on port 5001. Opened from the Flask server itself, relative URLs are used; from file://, the full URL. */
+const API=location.protocol.startsWith("http")?"":"http://127.0.0.1:5001";
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct=(v,d=1)=>(v*100).toFixed(d)+"%",fmt=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:0});
+/* methods the backend can return; the default config runs centralized, local_only, fedprox and hierarchical */
+const M=["centralized","local_only","fedavg","fedprox","hierarchical"];
+/* reference points: shown for context, never ranked */
+const REF=["centralized","local_only"];
+const NM={centralized:"Centralized",local_only:"Local-only",fedavg:"FedAvg",fedprox:"FedProx",fedper:"FedPer",fedprox_ft:"FT",hierarchical:"Hierarchical"};
+let CO={centralized:"#8A8379",local_only:"#CDBFA6",fedavg:"#8FB3B4",fedprox:"#1E4D52",fedper:"#D9A07A",fedprox_ft:"#4A8A8E",hierarchical:"#C4572E"};
+let CC=["#C4572E","#1E4D52","#15714f","#a87a00","#7a3b8f","#6b6b63"];
+const SC=["Title","The roundabout","Three ways to learn","Your data","Results","Theory and limits"];
+const LAST=SC.length-1;
+let PK=[8,13,17,21],RN=["Road A","Road B","Road C","Road D"],RC=["#3d6b73","#b8552b","#c9a24a","#7a8b6f"];
+const rate=(i,h)=>{let d=Math.abs(h-PK[i]);d=Math.min(d,24-d);return .1+Math.exp(-d*d/11.5)};
+const EN=[[210,14],[406,210],[210,406],[14,210]],IN=[[210,162],[258,210],[210,258],[162,210]],LP=[[210,6],[372,196],[210,424],[48,196]];
+const S={sc:0,hr:8,play:true,mode:"hier",fz:null,res:null,resErr:null,sig:"",zones:null,zErr:null,uploaded:null,up:null,upErr:null,clean:null,run:{state:"idle",error:null},opt:{missing:"interpolate",outlier:"clip",k:3}};
+const hasRes=()=>!!(S.res&&S.res.methods),done=()=>hasRes()?M.filter(k=>S.res.methods[k]):[];
+const zn=()=>S.zones?Object.keys(S.zones.zones).sort():[],clOf=z=>S.res&&S.res.clusters&&S.res.clusters[z]!==undefined?S.res.clusters[z]:null;
+/* one palette for the whole page: sand ground, deep teal, terracotta, and one neutral */
+const PAL={a:"#C4572E",b:"#1E4D52",c:"#8A8379",d:"#8FB3B4"};
+function setPalette(){RC=[PAL.b,PAL.a,PAL.c,PAL.d];CO={centralized:PAL.c,local_only:"#CDBFA6",fedavg:PAL.d,fedprox:PAL.b,fedper:"#D9A07A",fedprox_ft:"#4A8A8E",hierarchical:PAL.a};CC=[PAL.a,PAL.b,PAL.d,PAL.c,"#CDBFA6","#4A4540"]}
+function dlCSV(){const d=S.res;if(!hasRes()||!done().length)return;const ks=done(),zs=Object.keys(d.methods[ks[0]].per_zone).sort();
+ const rows=[["zone","method","wmape","mae","rmse"]];zs.forEach(z=>ks.forEach(k=>{const m=d.methods[k].per_zone[z];rows.push([z,k,m.wmape,m.mae,m.rmse])}));
+ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"}));
+ a.download=(S.uploaded||"builtin").replace(/\.csv$/i,"")+"_results.csv";a.click();URL.revokeObjectURL(a.href)}
+const stat=(k,v,hot)=>`<div class="stat${hot?" hot":""}"><b>${v}</b><span>${k}</span></div>`;
+const state=(t,b)=>`<div class="state"><b>${t}</b><br><span class="mut">${b}</span></div>`;
+
+/* ---------- charts ---------- */
+function lineSvg(o){const W=640,H=o.H||240,m={l:46,r:12,t:12,b:34},iw=W-m.l-m.r,ih=H-m.t-m.b;
+ const all=o.series.flatMap(s=>s.vals);let lo=Math.min(...all),hi=Math.max(...all);if(lo>=0)lo=0;hi+=(hi-lo)*.08||1;
+ const n=o.xs.length,X=i=>m.l+(n==1?iw/2:i/(n-1)*iw),Y=v=>m.t+ih-(v-lo)/(hi-lo||1)*ih;
+ let s=`<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+ for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4,y=Y(v);s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="#dcd7ca"/><text x="${m.l-6}" y="${y+4}" text-anchor="end" font-size="11" fill="#4a4a45">${o.yf?o.yf(v):v.toFixed(0)}</text>`}
+ o.xs.forEach((x,i)=>{if(!o.ev||i%o.ev==0)s+=`<text x="${X(i)}" y="${H-12}" text-anchor="middle" font-size="11" fill="#4a4a45">${esc(x)}</text>`});
+ if(o.cur!=null)s+=`<line x1="${X(o.cur)}" x2="${X(o.cur)}" y1="${m.t}" y2="${m.t+ih}" stroke="#1E4D52" stroke-width="2"/>`;
+ o.series.forEach(se=>{s+=`<polyline fill="none" stroke="${se.c}" stroke-width="${se.w||2}" ${se.d?`stroke-dasharray="${se.d}"`:""} points="${se.vals.map((v,i)=>X(i)+","+Y(v)).join(" ")}"/>`;if(se.dots)se.vals.forEach((v,i)=>s+=`<circle cx="${X(i)}" cy="${Y(v)}" r="3.5" fill="${se.c}"/>`)});
+ return s+"</svg>"}
+function barSvg(d,ks){const W=640,H=250,m={l:40,t:18,b:32},ih=H-m.t-m.b,mx=Math.max(...ks.map(k=>d.methods[k].worst_wmape))*1.15,gw=(W-m.l-8)/ks.length;
+ let s=`<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+ ks.forEach((k,i)=>{const r=d.methods[k];[[r.mean_wmape,1],[r.worst_wmape,.35]].forEach(([v,o],j)=>{const h=v/mx*ih,x=m.l+i*gw+gw*.12+j*gw*.38;if(j===0&&r.std_wmape!=null){const cx=x+gw*.17,y1=m.t+ih-(v+r.std_wmape)/mx*ih,y2=m.t+ih-Math.max(0,v-r.std_wmape)/mx*ih;s+=`<line x1="${cx}" x2="${cx}" y1="${y1}" y2="${y2}" stroke="#23211E" stroke-width="1.5"/><line x1="${cx-4}" x2="${cx+4}" y1="${y1}" y2="${y1}" stroke="#23211E" stroke-width="1.5"/><line x1="${cx-4}" x2="${cx+4}" y1="${y2}" y2="${y2}" stroke="#23211E" stroke-width="1.5"/>`}
+  s+=`<rect x="${x}" y="${m.t+ih-h}" width="${gw*.34}" height="${h}" fill="${CO[k]}" opacity="${o}"/><text x="${x+gw*.17}" y="${m.t+ih-h-4}" text-anchor="middle" font-size="10" fill="#23211E">${(v*100).toFixed(1)}</text>`});
+  s+=`<text x="${m.l+i*gw+gw/2}" y="${H-10}" text-anchor="middle" font-size="11" fill="#23211E" ${k==="hierarchical"?'font-weight="700"':""}>${NM[k]}</text>`});
+ return s+`<line x1="${m.l}" x2="${W}" y1="${m.t+ih}" y2="${m.t+ih}" stroke="#1E4D52"/></svg>`}
+
+/* ---------- scene 1: the roundabout ---------- */
+const clk=h=>String(h).padStart(2,"0")+":00";
+const curves=()=>lineSvg({series:[0,1,2,3].map(i=>({c:RC[i],w:2.5,vals:Array.from({length:24},(_,h)=>rate(i,h))})),xs:Array.from({length:24},(_,h)=>h+"h"),ev:3,cur:S.hr,yf:v=>v.toFixed(1),H:230});
+function sceneRound(){
+ const roads=[0,1,2,3].map(i=>`<line id="rd${i}" x1="${EN[i][0]}" y1="${EN[i][1]}" x2="${IN[i][0]}" y2="${IN[i][1]}" stroke="${RC[i]}" stroke-opacity=".3"/>`+Array.from({length:8},(_,j)=>`<circle id="d${i}_${j}" r="5" fill="${RC[i]}"/>`).join("")+`<text x="${LP[i][0]}" y="${LP[i][1]}" text-anchor="middle" font-size="13" font-weight="700" fill="${RC[i]}">${RN[i]} · peak ${clk(PK[i])}</text>`).join("");
+ return `<div class="eb">Chapter 1</div><h2>A roundabout, four roads, four rhythms</h2>
+ <p class="mut" style="max-width:720px">Every zone of the city feeds the same centre, but each one fills up at a different time of day. That difference between zones is what makes traffic data <b>non-IID</b>. Press play, or drag the clock.</p>
+ <div class="g2" style="margin-top:16px;align-items:center"><div class="card"><svg viewBox="-70 -26 560 482" width="100%">${roads}<circle cx="210" cy="210" r="48" fill="#fff" stroke="#1E4D52" stroke-width="3"/><text x="210" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#23211E">CITY</text><text x="210" y="222" text-anchor="middle" font-size="12" font-weight="700" fill="#23211E">CENTRE</text></svg></div>
+ <div><div class="card"><div class="row" style="margin-top:0"><b id="clock" style="font:700 34px Georgia;min-width:90px">${clk(S.hr)}</b><button class="btn" data-play="1" id="pl">${S.play?"Pause":"Play"}</button></div>
+ <input type="range" id="hr" min="0" max="23" value="${S.hr}" aria-label="Hour of day"><p class="mut" id="busy" style="margin-top:6px"></p><div id="cv">${curves()}</div></div>
+ <div class="note">One model trained on the average of these four curves fits none of them well. Hold that thought: the next chapter shows three ways to learn from this city.</div></div></div>`}
+function setHour(){const e=$("hr");if(!e)return;e.value=S.hr;$("clock").textContent=clk(S.hr);$("cv").innerHTML=curves();const r=[0,1,2,3].map(i=>rate(i,S.hr));$("busy").innerHTML="Busiest now: <b>"+RN[r.indexOf(Math.max(...r))]+"</b>"}
+function tick(){if(S.sc!==1||!$("rd0"))return;const t=Date.now()/2400;
+ for(let i=0;i<4;i++){const r=rate(i,S.hr),n=Math.round(r*7.2);$("rd"+i).setAttribute("stroke-width",4+r*18);
+  for(let j=0;j<8;j++){const c=$(`d${i}_${j}`),p=(t+j/8)%1,a=EN[i],b=IN[i];c.setAttribute("cx",a[0]+(b[0]-a[0])*p);c.setAttribute("cy",a[1]+(b[1]-a[1])*p);c.setAttribute("opacity",j<n?1:0)}}}
+setInterval(tick,40);setInterval(()=>{if(S.play&&S.sc===1){S.hr=(S.hr+1)%24;setHour()}},800);
+
+/* ---------- scene 2: three ways to learn ---------- */
+const INFO={central:["Pool everything","Raw records leave every zone","One model for all zones","All raw data, once"],flat:["Share weights, average once","Only weights leave a zone","One global model; zones pull it in different directions","4 uploads per round (one per zone)"],hier:["Cluster by rhythm, then share the encoder","Only weights leave a zone","A model per cluster; only the encoder is shared globally","2 clusters ÷ every G rounds (e.g. 0.5 per round)"]};
+function diagram(){const m=S.mode,zy=i=>52+i*70,CL=[[400,87],[400,227]],ln=(a,b,c,w)=>`<line class="fl" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${c}" stroke-width="${w}"/>`,bx=(x,y,w,h,t,f)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f||"#fff"}" stroke="#1E4D52" stroke-width="2"/><text x="${x+w/2}" y="${y+h/2+5}" text-anchor="middle" font-size="13" font-weight="700" fill="${f?"#fff":"#1E4D52"}">${t}</text>`;
+ let s=`<svg viewBox="0 0 780 310" width="100%">`;
+ for(let i=0;i<4;i++)s+=m==="hier"?ln([150,zy(i)],CL[i<2?0:1],"#1E4D52",2):ln([150,zy(i)],[640,157],m==="central"?"#C4572E":"#1E4D52",m==="central"?4:2);
+ if(m==="hier"){CL.forEach(c=>s+=ln([c[0]+40,c[1]],[640,157],"#1E4D52",1.5));CL.forEach((c,i)=>s+=bx(c[0]-40,c[1]-24,80,48,"Cluster "+(i+1)))}
+ for(let i=0;i<4;i++)s+=bx(60,zy(i)-22,90,44,RN[i]);
+ s+=bx(640,127,110,60,"Server","#1E4D52");
+ s+=`<text x="${m==="hier"?545:395}" y="${m==="hier"?150:292}" font-size="12" fill="${m==="central"?"#C4572E":"#1E4D52"}" font-weight="700" text-anchor="middle">${m==="central"?"raw records travel":m==="flat"?"weights travel":"encoder only"}</text>`;
+ return s+"</svg>"}
+function sceneWays(){const v=INFO[S.mode],tb=[["central","Centralized"],["flat","Flat FL"],["hier","Hierarchical"]];
+ return `<div class="eb">Chapter 2</div><h2>Three ways to learn from the city</h2><p class="mut" style="max-width:720px">Same four roads, same data. What changes is what leaves each zone and who gets to average what.</p>
+ <div class="row"><div class="tabs">${tb.map(t=>`<button data-mode="${t[0]}" class="${S.mode===t[0]?"on":""}">${t[1]}</button>`).join("")}</div></div>
+ <div class="card">${diagram()}</div><h3>${v[0]}</h3>
+ <div class="g3">${stat("What leaves a zone",v[1])}${stat("Model(s) trained",v[2])}${stat("Wide-link load",v[3])}</div>
+ <div class="note good">Hierarchical learning keeps data local like flat FL, but groups roads with similar rhythms first, so each group's model is not dragged toward a different peak.</div>`}
+
+/* ---------- data: parsing, cleaning ---------- */
+function parseCSV(t){const rows=[];let r=[],c="",q=false;for(let i=0;i<t.length;i++){const ch=t[i];if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}else if(ch==='"')q=true;else if(ch===","){r.push(c);c=""}else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&t[i+1]==="\n")i++;r.push(c);rows.push(r);r=[];c=""}else c+=ch}
+ if(c!==""||r.length){r.push(c);rows.push(r)}return rows.filter(r=>r.some(x=>x.trim()!==""))}
+const isNum=v=>v!==""&&isFinite(Number(v)),isTime=v=>/\d{1,4}[-\/.:]\d{1,2}/.test(v)&&!isNaN(new Date(v)),num=v=>{const s=(v||"").trim();return isNum(s)?Number(s):null};
+const zk=(r,zi)=>zi===undefined?"Uploaded data":(r[zi]||"").trim()||"unknown",ds=ms=>new Date(ms).toISOString().slice(0,16).replace("T"," ");
+function detect(rows){if(rows.length<2)throw new Error("the file needs a header and data rows.");const header=rows[0].map(h=>h.trim()),body=rows.slice(1).map(r=>{const x=r.slice(0,header.length);while(x.length<header.length)x.push("");return x}),ix=header.map((_,i)=>i);
+ const sc=(i,f)=>{const v=body.map(r=>r[i].trim()).filter(x=>x!=="");return v.length?v.filter(f).length/v.length:0};
+ const tc=ix.filter(i=>sc(i,isTime)>.9),ti=tc.find(i=>/time|date|stamp/i.test(header[i]))??tc[0];if(ti===undefined)throw new Error("no timestamp column found.");
+ const nc=ix.filter(i=>i!==ti&&sc(i,isNum)>.9),vi=nc.find(i=>/flow|count|traffic|volume|vehicle|value|speed/i.test(header[i]))??nc[0];if(vi===undefined)throw new Error("no numeric traffic column found.");
+ return{header,body,ti,vi,zi:ix.find(i=>i!==ti&&i!==vi&&/zone|sensor|node|location|area|^id$/i.test(header[i]))}}
+function rawStats(d){const z=new Set,seen=new Set;let bad=0,dup=0;d.body.forEach(r=>{const v=num(r[d.vi]);if(v===null||v<0)bad++;const t=new Date((r[d.ti]||"").trim()).getTime(),n=zk(r,d.zi);z.add(n);const k=n+"|"+t;seen.has(k)?dup++:seen.add(k)});return{rows:d.body.length,zones:z.size,bad,dup}}
+const q=(a,p)=>{if(!a.length)return 0;const i=(a.length-1)*p,l=Math.floor(i),h=Math.ceil(i);return a[l]+(a[h]-a[l])*(i-l)};
+function preprocess(u,o){const{header,body,ti,vi,zi}=u,rep={rowsIn:body.length,dups:0,filled:0,dropped:0,clipped:0,zones:0};let recs=[];
+ body.forEach(r=>{const t=new Date((r[ti]||"").trim()).getTime();if(isNaN(t))return;let v=num(r[vi]);if(v!==null&&v<0)v=null;recs.push({r:r.slice(),t,z:zk(r,zi),v})});
+ const seen=new Set;recs=recs.filter(x=>{const k=x.z+"|"+x.t;if(seen.has(k)){rep.dups++;return false}seen.add(k);return true});
+ const gs={};recs.forEach(x=>(gs[x.z]=gs[x.z]||[]).push(x));const out=[];
+ Object.keys(gs).sort().forEach(z=>{let g=gs[z].sort((a,b)=>a.t-b.t);
+  if(o.missing==="drop"){const n=g.length;g=g.filter(x=>x.v!==null);rep.dropped+=n-g.length}
+  else if(g.some(x=>x.v!==null)){const med=q(g.map(x=>x.v).filter(v=>v!==null).sort((a,b)=>a-b),.5);
+   g.forEach((x,i)=>{if(x.v!==null)return;rep.filled++;if(o.missing==="median"){x.v=med;return}let p=i-1,n=i+1;while(p>=0&&g[p].v===null)p--;while(n<g.length&&g[n].v===null)n++;
+    x.v=p>=0&&n<g.length?g[p].v+(g[n].v-g[p].v)*(x.t-g[p].t)/(g[n].t-g[p].t||1):p>=0?g[p].v:g[n].v})}
+  else{rep.dropped+=g.length;g=[]}
+  if(!g.length)return;
+  if(o.outlier==="clip"){const s=g.map(x=>x.v).sort((a,b)=>a-b),a=q(s,.25),b=q(s,.75),k=o.k*(b-a);if(b>a)g.forEach(x=>{if(x.v<a-k){x.v=a-k;rep.clipped++}else if(x.v>b+k){x.v=b+k;rep.clipped++}})}
+  g.forEach(x=>{x.r[vi]=String(Math.round(x.v*1000)/1000);out.push(x.r)});rep.zones++});
+ rep.rowsOut=out.length;const e=v=>/[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+ return{csv:[header,...out].map(r=>r.map(e).join(",")).join("\n"),rows:out,rep}}
+function buildZones(d,name){const acc={};d.rows.forEach(r=>{const v=num(r[d.vi]),t=new Date((r[d.ti]||"").trim());if(v===null||isNaN(t))return;const n=zk(r,d.zi),z=acc[n]||(acc[n]={a:Array(24).fill(0),an:Array(24).fill(0),e:Array(24).fill(0),en:Array(24).fill(0),s:0,n:0,t0:t,t1:t});
+  const h=t.getHours(),we=t.getDay()%6===0;we?(z.e[h]+=v,z.en[h]++):(z.a[h]+=v,z.an[h]++);z.s+=v;z.n++;if(t<z.t0)z.t0=t;if(t>z.t1)z.t1=t});
+ const zones={};Object.keys(acc).sort().forEach(n=>{const z=acc[n],av=(s,c)=>s.map((x,i)=>c[i]?x/c[i]:0),wd=av(z.a,z.an),we=av(z.e,z.en),sum=x=>x.reduce((p,c)=>p+c,0),wm=sum(z.an)?sum(z.a)/sum(z.an):null,em=sum(z.en)?sum(z.e)/sum(z.en):null;
+  zones[n]={weekday:wd,weekend:we,mean:z.s/z.n,peak_hour:wd.indexOf(Math.max(...wd)),weekend_ratio:wm&&em?em/wm:null,rows:z.n,start:ds(z.t0),end:ds(z.t1)}});
+ if(!Object.keys(zones).length)throw new Error("no valid rows found.");return{source:name,zones}}
+
+/* ---------- backend ---------- */
+async function fj(u){try{const r=await fetch(API+u);return{ok:r.ok,body:await r.json().catch(()=>null)}}catch(e){return{ok:false,body:null,off:true}}}
+async function loadResults(){const ds=S.uploaded?"uploaded":"builtin",r=await fj("/api/results?dataset="+ds);if(ds!==(S.uploaded?"uploaded":"builtin"))return;let sig;
+ if(r.ok&&r.body){S.res=r.body;S.resErr=null;sig=JSON.stringify(r.body)}else{S.res=null;S.resErr=r.off?"offline":(r.body&&r.body.error)||"No experiment results yet.";sig="e"+S.resErr}
+ if(sig!==S.sig){S.sig=sig;render()}}
+async function loadZones(){if(S.zones||S.uploaded)return;const r=await fj("/api/zones");if(r.ok&&r.body){S.zones=r.body;S.zErr=null}else S.zErr=r.off?"offline":(r.body&&r.body.error)||"Built-in dataset not available.";render()}
+async function loadStatus(){const r=await fj("/api/run/status");if(r.ok&&r.body&&(r.body.state!==S.run.state||r.body.error!==S.run.error)){S.run={state:r.body.state,error:r.body.error};render()}}
+async function startRun(){S.run={state:"running",error:null};render();try{const r=await fetch(API+"/api/run",{method:"POST"}),b=await r.json().catch(()=>({}));if(!r.ok)S.run={state:"error",error:b.error||"Could not start the run."}}catch(e){S.run={state:"error",error:"Backend not reachable."}}render()}
+/* the detected column names travel with the upload, so the server maps them to the config's names */
+async function sendUpload(t,qs){try{const r=await fetch(API+"/api/upload?"+qs,{method:"POST",headers:{"Content-Type":"text/csv"},body:t});if(!r.ok){const b=await r.json().catch(()=>({}));S.run={state:"error",error:b.error||"The backend rejected the file."};render();return}}catch(e){S.run={state:"error",error:"Backend not reachable."};render();return}startRun()}
+function useCleaned(){try{const c=S.clean;S.zones=buildZones({rows:c.rows,ti:S.up.ti,vi:S.up.vi,zi:S.up.zi},c.name);S.uploaded=c.name;S.res=null;S.resErr=null;S.sig="";S.run={state:"idle",error:null};render();sendUpload(c.csv,new URLSearchParams({ts:S.up.header[S.up.ti],val:S.up.header[S.up.vi],zone:S.up.zi===undefined?"":S.up.header[S.up.zi]}).toString())}catch(e){S.upErr=e.message;render()}}
+function resetBuiltIn(){Object.assign(S,{uploaded:null,up:null,clean:null,upErr:null,zones:null,zErr:null,res:null,resErr:null,sig:"",run:{state:"idle",error:null}});render();loadZones();loadResults()}
+function handleCSV(f){if(!f)return;const rd=new FileReader;rd.onload=()=>{try{const d=detect(parseCSV(String(rd.result).replace(/^\uFEFF/,"")));S.up={name:f.name,...d,st:rawStats(d)};S.clean=null;S.upErr=null}catch(e){S.upErr="Could not read "+f.name+": "+e.message}render()};rd.readAsText(f)}
+function runPanel(){if(!S.uploaded)return"";const r=S.run,h=hasRes();return `<div class="note ${r.state==="error"?"bad":""}">${r.state==="running"?`Running the experiments on <code>${esc(S.uploaded)}</code>. This page fills in as each method finishes.`:r.state==="error"?`The run failed:<pre>${esc(r.error||"unknown error")}</pre>`:h?`Results below come from <code>${esc(S.uploaded)}</code>.`:`No results yet for <code>${esc(S.uploaded)}</code>.`}<div class="row" style="margin-bottom:0"><button class="btn p" data-run="1" ${r.state==="running"?"disabled":""}>${r.state==="running"?"Running...":h?"Re-run experiments":"Run experiments"}</button></div></div>`}
+
+/* ---------- scene 3: your data ---------- */
+function sceneData(){const u=S.up,o=S.opt;
+ let h=`<div class="eb">Chapter 3</div><h2>Your data</h2><p class="mut" style="max-width:720px">Bring any traffic file. It is cleaned in your browser, and only the cleaned file goes to your local backend.</p>
+ <div class="card"><h3>1 · Choose a CSV</h3><p class="mut">A timestamp, a traffic count, and optionally a zone column. Names are detected automatically.</p><div class="row"><button class="btn p" id="pick">Choose CSV</button><input type="file" id="f" accept=".csv" hidden>${S.uploaded||u?'<button class="btn" data-reset="1">Use built-in data</button>':""}</div>${S.upErr?`<div class="note bad">${esc(S.upErr)}</div>`:""}</div>`;
+ if(u){const s=u.st;h+=`<div class="card"><h3>2 · Found in ${esc(u.name)}</h3><div class="g4">${stat("Rows",fmt(s.rows))}${stat("Zones",s.zones)}${stat("Missing or invalid",fmt(s.bad))}${stat("Duplicates",fmt(s.dup))}</div><p class="mut" style="margin-top:8px">Timestamp <b>${esc(u.header[u.ti])}</b> · Traffic <b>${esc(u.header[u.vi])}</b> · Zone <b>${u.zi===undefined?"none":esc(u.header[u.zi])}</b></p></div>
+ <div class="card"><h3>3 · Clean</h3><div class="g3"><div class="field">Missing or negative values<select data-opt="missing">${[["interpolate","Interpolate over time"],["median","Zone median"],["drop","Drop the row"]].map(x=>`<option value="${x[0]}" ${o.missing===x[0]?"selected":""}>${x[1]}</option>`).join("")}</select></div>
+ <div class="field">Outliers (IQR fences)<select data-opt="outlier"><option value="clip" ${o.outlier==="clip"?"selected":""}>Clip to the fence</option><option value="off" ${o.outlier==="off"?"selected":""}>Leave as is</option></select></div>
+ <div class="field">IQR multiplier<input type="number" data-opt="k" min="0.5" step="0.5" value="${o.k}"></div></div><p class="mut">Duplicates are always removed and rows sorted. Values are not rescaled, because error is measured on real counts.</p><div class="row"><button class="btn p" data-prep="1">Run cleaning</button></div></div>`}
+ if(S.clean){const r=S.clean.rep;h+=`<div class="card"><h3>4 · Report</h3><div class="g4">${stat("Rows before",fmt(r.rowsIn))}${stat("Rows after",fmt(r.rowsOut))}${stat("Values filled",fmt(r.filled))}${stat("Outliers clipped",fmt(r.clipped))}</div><div class="row"><button class="btn p" data-use="1">Use this data and run experiments</button><button class="btn" data-dl="1">Download cleaned CSV</button></div></div>`}
+ h+=runPanel();
+ if(S.zones){const n=zn(),sh=a=>{const m=a.reduce((x,y)=>x+y,0)/24,s=Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/24)||1;return a.map(v=>(v-m)/s)};
+  h+=`<div class="g2"><div class="card"><h3>${S.uploaded?"Active dataset":"Built-in dataset"}</h3><table><thead><tr><th>Zone</th><th>Rows</th><th>Average</th><th>Peak</th></tr></thead><tbody>${n.map(k=>{const z=S.zones.zones[k];return `<tr><td>${esc(k)}</td><td>${fmt(z.rows)}</td><td>${fmt(z.mean)}</td><td>${z.peak_hour}:00</td></tr>`}).join("")}</tbody></table></div>
+  <div class="card"><h3>Weekday rhythm, shape only</h3>${lineSvg({series:n.map((k,i)=>({c:CC[i%6],w:1.8,vals:sh(S.zones.zones[k].weekday)})),xs:Array.from({length:24},(_,h)=>h+"h"),ev:3,yf:v=>v.toFixed(1),H:230})}<p class="mut">${new Set(n.map(k=>S.zones.zones[k].peak_hour)).size} different peak hour(s) across ${n.length} zones.</p></div></div>`}
+ else h+=state(S.zErr==="offline"?"Backend not running":"No dataset loaded",S.zErr==="offline"?"Start it with <code>python app/app.py</code>, or choose a CSV above.":esc(S.zErr||"Choose a CSV above."));
+ return h}
+
+/* ---------- scene 4: results ---------- */
+/* reference points: centralized upper bound and local-only floor, shown but not ranked */
+function refCard(d,ks){
+ const refs=REF.filter(k=>d.methods[k]);if(!refs.length||!ks.length)return"";
+ const bk=[...ks].sort((a,b)=>d.methods[a].mean_wmape-d.methods[b].mean_wmape)[0],b=d.methods[bk].mean_wmape;
+ const cell=k=>{const v=d.methods[k].mean_wmape,g=(b-v)/v;return stat(`${NM[k]} · ${k==="centralized"?"pools all raw data (upper bound)":"no sharing at all"}`,`${pct(v,2)}<br><span style="font-weight:500;font-size:13px">best of the four is ${pct(Math.abs(g))} ${g>=0?"above":"below"}</span>`)};
+ return `<div class="card"><h3>Reference points, not ranked</h3><div class="g3">${stat("Best of the four compared methods",`${NM[bk]} · ${pct(b,2)}`,1)}${refs.map(cell).join("")}</div><p class="mut" style="margin-top:10px">Centralized shows what is possible when privacy is ignored; local-only shows what each zone manages alone. The gap to centralized is the accuracy cost of keeping data local.</p></div>`}
+
+/* predicted vs actual for one zone; needs a forecast block in the results */
+function forecastCard(d,ks){
+ const f=d.forecast,zs=f?Object.keys(f).sort():[];
+ if(!zs.length)return `<div class="card"><h3>Predicted vs actual traffic</h3>${state("No forecast data yet","Add a <code>forecast</code> block to the results file: <code>{ \"Zone A\": { \"actual\": [...], \"pred\": { \"hierarchical\": [...], \"fedavg\": [...] } } }</code>")}</div>`;
+ const z=f[S.fz]?S.fz:zs[0],e=f[z],ms=ks.filter(k=>e.pred&&e.pred[k]),n=e.actual.length;
+ return `<div class="card"><h3>Predicted vs actual traffic</h3><div class="row" style="margin-top:0"><div class="tabs">${zs.map(k=>`<button data-fz="${esc(k)}" class="${k===z?"on":""}">${esc(k)}</button>`).join("")}</div></div>
+ ${lineSvg({series:[{c:"#23211E",w:2.6,vals:e.actual},...ms.map(k=>({c:CO[k],w:k==="hierarchical"?3:1.6,vals:e.pred[k]}))],xs:Array.from({length:n},(_,i)=>String(i+1)),ev:Math.max(1,Math.ceil(n/8)),yf:v=>fmt(v),H:250})}
+ <p class="mut"><b style="color:#23211E">Actual</b> · ${ms.map(k=>`<b style="color:${CO[k]}">${NM[k]}</b>`).join(" · ")}</p></div>`}
+
+function sceneResults(){let h=`<div class="eb">Chapter 4</div><h2>Results</h2><p class="mut" style="max-width:720px">Federated methods and local-only get the same epochs per zone. Centralized is an upper bound that sees all the data, so it is not a like-for-like baseline. Fine-tuning adds its own local epochs on top of the federated rounds. Error is WMAPE on held-out data, so lower is better.</p><div class="row"><button class="btn" data-csv="1">Download results CSV</button></div>`+runPanel();
+ if(!hasRes()||!done().length)return h+state(S.resErr==="offline"?"Backend not running":"Waiting for experiment results",S.resErr==="offline"?"Start it with <code>python app/app.py</code>.":S.uploaded?"Use the run button above.":"Run <code>python -m src.run_experiments</code>. Each finished method appears here.");
+ const d=S.res,ks=done(),zs=Object.keys(d.methods[ks[0]].per_zone).sort(),rank=[...ks].sort((a,b)=>d.methods[a].mean_wmape-d.methods[b].mean_wmape),hi=d.methods.hierarchical,fa=d.methods.fedprox;
+ const nc=ks.filter(k=>k!=="centralized");const wins=Object.fromEntries(ks.map(k=>[k,0]));zs.forEach(z=>{const b=Math.min(...nc.map(k=>d.methods[k].per_zone[z].wmape));nc.forEach(k=>{if(d.methods[k].per_zone[z].wmape===b)wins[k]++})});
+ let find=hi?(rank[0]==="hierarchical"?`Hierarchical has the lowest mean error (${pct(hi.mean_wmape,2)}).`:`${NM[rank[0]]} has the lowest mean error (${pct(d.methods[rank[0]].mean_wmape,2)}); hierarchical is at ${pct(hi.mean_wmape,2)}.`)+(fa?` Against flat FedProx it changes mean error by ${hi.mean_wmape<=fa.mean_wmape?"-":"+"}${pct(Math.abs(hi.mean_wmape-fa.mean_wmape)/fa.mean_wmape)}.`:""):"Hierarchical has not finished yet.";
+ const hist=d.history||{},hk=["fedavg","fedprox","fedper","hierarchical"].filter(k=>hist[k]);
+ h+=`<div class="note ${hi&&rank[0]==="hierarchical"?"good":""}"><b>${find}</b> ${ks.length} of ${M.length} methods finished.</div>
+ <div class="g2"><div class="card"><h3>Error by method</h3>${barSvg(d,ks)}<p class="mut">Solid: mean over zones. Faded: worst zone.${(d.settings&&d.settings.seeds>1)||ks.some(k=>d.methods[k].std_wmape!=null)?" Whiskers: ± one standard deviation across seeds.":" One seed only: set <code>fed.seeds: [0, 1, 2]</code> in the config for error bars."}</p></div>
+ <div class="card"><h3>Ranking</h3><table><thead><tr><th>Method</th><th>Mean</th><th>Worst zone</th><th>Zone wins (excl. centralized)</th></tr></thead><tbody>${rank.map(k=>`<tr class="${k==="hierarchical"?"hl":""}"><td>${NM[k]}</td><td>${pct(d.methods[k].mean_wmape,2)}${d.methods[k].std_wmape!=null?` ± ${pct(d.methods[k].std_wmape,2)}`:""}</td><td>${pct(d.methods[k].worst_wmape,2)}</td><td>${wins[k]}/${zs.length}</td></tr>`).join("")}</tbody></table></div></div>`;
+ if(hk.length)h+=`<div class="card"><h3>Validation error per round</h3>${lineSvg({series:hk.map(k=>({c:CO[k],w:k==="hierarchical"?3:2,dots:1,vals:hist[k]})),xs:Array.from({length:Math.max(...hk.map(k=>hist[k].length))},(_,i)=>String(i+1)),yf:v=>pct(v),H:230})}<p class="mut">${hk.map(k=>`<b style="color:${CO[k]}">${NM[k]}</b>`).join(" · ")}</p></div>`;
+ h+=forecastCard(d,ks);
+ const all=ks.flatMap(k=>zs.map(z=>d.methods[k].per_zone[z].wmape)),lo=Math.min(...all),mx=Math.max(...all);
+ h+=`<div class="card" style="overflow-x:auto"><h3>Error per zone</h3><table><thead><tr><th>Zone</th><th>Cluster</th>${ks.map(k=>`<th>${NM[k]}</th>`).join("")}</tr></thead><tbody>${zs.map(z=>`<tr><td>${esc(z)}</td><td>${clOf(z)===null?"-":clOf(z)+1}</td>${ks.map(k=>{const v=d.methods[k].per_zone[z].wmape;return `<td style="background:rgba(196,87,46,${(.06+.5*(v-lo)/(mx-lo||1)).toFixed(2)})">${pct(v)}</td>`}).join("")}</tr>`).join("")}</tbody></table></div>`;
+ const cl=d.clusters||{};if(Object.keys(cl).length){const g={};Object.keys(cl).sort().forEach(z=>(g[cl[z]]=g[cl[z]]||[]).push(z));const mf=(k,a)=>a.reduce((s,z)=>s+d.methods[k].per_zone[z].wmape,0)/a.length,cm=["fedavg","hierarchical"].filter(k=>d.methods[k]);
+  h+=`<h3 style="margin-top:20px">Which roads were grouped</h3><div class="g3">${Object.keys(g).sort().map(c=>`<div class="card" style="margin:0;border-top:5px solid ${CC[c%6]}"><h3>Cluster ${+c+1}</h3><p class="mut">${g[c].map(esc).join(", ")}</p>${cm.filter(k=>g[c].every(z=>d.methods[k].per_zone[z])).map(k=>`<p style="font-size:14px"><b style="color:${CO[k]}">${NM[k]}</b> ${pct(mf(k,g[c]))}</p>`).join("")}</div>`).join("")}</div>`}
+ return h}
+
+/* ---------- scene 5: theory, reacting to the results ---------- */
+const RT=.02;   // differences under 2% are treated as noise (a judgement; one seed)
+const CT=.005;  // a method still improving by more than 0.5% in the last round is not converged
+
+function evidence(){
+ if(!hasRes()||!done().length)return null;
+ const d=S.res,m=d.methods,ks=done(),zs=Object.keys(m[ks[0]].per_zone).sort(),n=zs.length;
+ const E={ks,zs,n,done:ks.length,total:M.length},H=m.hierarchical,P=m.fedprox,L=m.local_only,C=m.centralized;
+ const fed=ks.filter(k=>k!=="centralized"&&k!=="local_only");
+ if(H&&P){
+  const diff=(P.mean_wmape-H.mean_wmape)/P.mean_wmape,wins=zs.filter(z=>H.per_zone[z].wmape<P.per_zone[z].wmape).length;
+  E.hp={H:H.mean_wmape,P:P.mean_wmape,diff,wins,
+   state:Math.abs(diff)<RT?"tie":diff>0?"better":"worse",
+   steady:wins/n>=.75?"consistent":wins/n<=.25?"against":"mixed"};
+ }
+ if(L&&fed.length){const best=Math.min(...fed.map(k=>m[k].mean_wmape));E.lf={L:L.mean_wmape,best,bk:fed.find(k=>m[k].mean_wmape===best),fedWins:best<L.mean_wmape}}
+ if(C&&fed.length){const best=Math.min(...fed.map(k=>m[k].mean_wmape));E.cg={C:C.mean_wmape,best,gap:(best-C.mean_wmape)/C.mean_wmape}}
+ E.conv={};Object.keys(d.history||{}).forEach(k=>{const h=d.history[k]||[];if(h.length>=2){const last=(h[h.length-2]-h[h.length-1])/(h[h.length-2]||1);E.conv[k]={still:last>CT,last}}});
+ const cl=d.clusters||{},sizes={};Object.values(cl).forEach(c=>{sizes[c]=(sizes[c]||0)+1});
+ E.clusters=Object.keys(sizes).sort((a,b)=>a-b).map(c=>sizes[c]);
+ E.singles=E.clusters.filter(s=>s===1).length;
+ return E}
+
+const listNames=ks=>{const n=ks.map(k=>NM[k]);return n.length<2?n.join(""):n.slice(0,-1).join(", ")+" and "+n[n.length-1]};
+function claimBadge(E){
+ const hp=E&&E.hp;
+ if(!hp)return["Inconclusive","#6b6b63"];
+ if(hp.state==="better")return hp.steady==="consistent"?["Supported","#1E4D52"]:["Partly supported","#8A6A1F"];
+ return["Not supported","#C4572E"]}
+const badgeHtml=cb=>`<span style="font:700 12px Georgia;color:${cb[1]};margin-left:10px;letter-spacing:.04em">${cb[0]}</span>`;
+
+function verdictLines(E){
+ const L2=[],hp=E.hp;
+ if(hp){
+  if(hp.state==="tie")L2.push(`<b>Clustering made no meaningful difference.</b> Hierarchical reached ${pct(hp.H,2)} and FedProx ${pct(hp.P,2)}, a gap of ${pct(Math.abs(hp.diff))}, inside the ${pct(RT,0)} band treated as noise. Both use the same mu, so this comparison isolates clustering, and it shows no benefit.`);
+  else if(hp.state==="better")L2.push(`<b>Clustering reduced error.</b> Hierarchical reached ${pct(hp.H,2)} against ${pct(hp.P,2)} for FedProx, ${pct(hp.diff)} lower. Both use the same mu, so the gain comes from clustering. It is better on ${hp.wins} of ${E.n} zones${hp.steady==="consistent"?", a consistent pattern.":hp.steady==="mixed"?", so the average depends on some zones more than others.":", so the average gain is driven by a minority of zones."}`);
+  else L2.push(`<b>Clustering increased error.</b> Hierarchical reached ${pct(hp.H,2)} against ${pct(hp.P,2)} for FedProx, ${pct(-hp.diff)} higher. It is better on only ${hp.wins} of ${E.n} zones. Likely causes are too few zones per cluster, which leaves each cluster model with fewer samples, or too few rounds for the cluster models to settle.`);
+ }
+ if(E.lf){
+  if(E.lf.fedWins)L2.push(`Federation beats local-only training: the best federated method (${NM[E.lf.bk]}) reached ${pct(E.lf.best,2)} against ${pct(E.lf.L,2)} for local-only.`);
+  else L2.push(`Local-only training (${pct(E.lf.L,2)}) matches or beats the best federated method (${pct(E.lf.best,2)}). With this little data per zone, sharing does not help here, so present the federated gains with that caveat.`);
+ }
+ if(E.cg){
+  if(E.cg.gap>=0)L2.push(`The best federated method is ${pct(E.cg.gap)} above the centralized upper bound (${pct(E.cg.best,2)} against ${pct(E.cg.C,2)}). That is the price of keeping raw data in each zone.`);
+  else L2.push(`The best federated method beats the centralized upper bound. The centralized run gets the same number of epochs as the federated rounds, so it may be under-trained. Check this before presenting.`);
+ }
+ const still=Object.keys(E.conv).filter(k=>E.conv[k].still);
+ if(Object.keys(E.conv).length){
+  L2.push(still.length?`${listNames(still)} still improved in the last round, so the ranking may change with more rounds.`:`All methods had flattened out by the last round, so more rounds are unlikely to change the ranking.`);
+ }
+ if(E.clusters.length===1)L2.push(`Only one cluster formed, so the hierarchical method reduces to flat FedProx and this run says nothing about clustering.`);
+ else if(E.clusters.length)L2.push(`${E.clusters.length} clusters formed, with sizes ${E.clusters.join(", ")} zones.${E.singles?` ${E.singles} of them hold a single zone, which gets no shared learning inside its cluster.`:""}`);
+ return L2}
+
+function sceneTheory(){
+ const s=S.res&&S.res.settings,E=evidence(),K=zn().length||(s&&s.zones),G=s&&s.global_every,C=E&&E.clusters.length?E.clusters.length:(s&&s.n_clusters),cb=claimBadge(E);
+ const src=S.uploaded?"your uploaded dataset":"the built-in dataset";
+ const verdict=E
+  ?`<div class="card" style="border-top:5px solid ${cb[1]}"><div class="row" style="margin-top:0"><h3>What your results say</h3>${badgeHtml(["Clustering claim: "+cb[0].toLowerCase(),cb[1]])}</div>
+    <p class="mut">Evidence from ${E.done} of ${E.total} methods on ${src}, ${E.n} zones, ${s?s.rounds:"?"} rounds, one seed.</p>
+    ${verdictLines(E).map(x=>`<p style="margin-top:10px">${x}</p>`).join("")}
+    <div class="note good" style="margin-top:16px"><b>The trade-off.</b> ${E.cg&&E.cg.gap>0?`Forecast accuracy can be lower than centralized training: the best federated method is ${pct(E.cg.gap)} above it. `:`Forecast accuracy can end up lower than centralized training, because no zone ever sees the whole city's data. `}In return, raw traffic records never leave their zone, which gives privacy by design.${K&&C&&G&&E.clusters.length>1?` Grouping zones with similar rhythms also supports traffic management: each cluster gets a model that fits its own pattern, and the wide link carries ${(C/G).toFixed(2)} uploads per round instead of ${K}.`:` Grouping zones with similar rhythms also supports traffic management by giving each cluster a model that fits its own pattern.`} Privacy here is a built-in property of the design, not a formal guarantee.</div></div>`
+  :`<div class="card"><h3>What your results say</h3><p class="mut">Run the experiments and this section will state what your results support and what they do not, based on the numbers.</p></div>`;
+ return `<div class="eb">Chapter 5</div><h2>Theory and limits</h2>
+ ${verdict}
+ <div class="card"><h3>The objective</h3><p class="mut">K zones, zone k holds n<sub>k</sub> samples from its own distribution P<sub>k</sub>. Federated learning minimises the data-weighted average of local losses. Non-IID means the P<sub>k</sub> differ, in volume and in daily shape.</p><div class="eq">min F(w) = &Sigma; p<sub>k</sub> F<sub>k</sub>(w), p<sub>k</sub> = n<sub>k</sub>/n</div></div>
+ <div class="g2"><div class="card"><h3>Why flat averaging struggles</h3><p class="mut">Local steps pull each zone toward its own optimum, and the average of drifted models is not the optimum of F. FedAvg still converges on non-IID data under convexity and smoothness (Li et al., ICLR 2020), but the bound carries a heterogeneity term and more local work enlarges the drift. FedProx (Li et al., MLSys 2020) adds a proximal term to limit the drift.</p></div>
+ <div class="card"><h3>Why clustering should help${badgeHtml(cb)}</h3><p class="mut">Inside a cluster the zones look alike, so drift is smaller and each cluster model fits its own shape. The price is fewer samples per model, so the number of clusters trades bias against variance. This is an argument, not a theorem: no convergence guarantee is claimed for this exact algorithm, and the evidence is empirical.</p></div></div>
+ <div class="card"><h3>Communication</h3><div class="eq">flat: K uploads per round on the wide link · hierarchical: C/G per round · saving &ge; K·G/C</div>${K&&C&&G?`<div class="note">With this run: K=${K}, C=${C}, G=${G}. Flat sends ${K} uploads per round, the hierarchy ${(C/G).toFixed(2)}, about ${(K*G/C).toFixed(1)}x fewer.</div>`:""}</div>
+ <div class="g2"><div class="card"><h3>Privacy</h3><p class="mut">Raw records stay in the zone. Shared weights are still not a formal guarantee: membership inference and gradient inversion are possible, and the clustering profile is derived from zone data.</p></div>
+ <div class="card"><h3>Limitations</h3><p class="mut">Short CPU training, one seed${E?`, so differences under ${pct(RT,0)} may be noise`:" (small gaps may be noise)"}, ${src} (${S.uploaded?"check it is representative of the traffic you want to forecast":"possibly synthetic, which validates the pipeline rather than real-world accuracy"}), and no newer or personalised baselines.</p></div></div>
+ <div class="card"><h3>Next steps</h3><p class="mut">Stronger baselines (FedPer, Ditto, IFCA, PatchTST), several seeds with confidence intervals, real city sensor data, graph models for neighbouring zones, secure aggregation and differential privacy, asynchronous clients, and dynamic re-clustering.</p></div>`}
+
+/* ---------- title + shell ---------- */
+function sceneTitle(){return `<div class="hero-wrap" style="display:flex;flex-direction:column;justify-content:center">
+ <div class="hero-kicker">Smart-city traffic prediction</div>
+ <h1>The Roundabout</h1>
+ <p class="hero-sub">Hierarchical federated learning for non-IID traffic prediction</p>
+ <p class="hero-lede">Four roads feed one centre, and each fills up at a different hour. How can a city learn to forecast all of them without ever pooling the raw data?</p>
+ <div class="hero-cta"><button class="btn p big" data-sc="1">Begin the walkthrough &rarr;</button><button class="btn big" data-sc="4">See the results</button></div>
+ <div class="hero-stats"><div><b>${hasRes()&&done().length?done().length:4}</b><span>methods compared</span></div><div><b>4</b><span>roads, each a federated client</span></div><div><b>0</b><span>raw records shared</span></div></div>
+ <div class="scroll-cue">Scroll to explore</div></div>`}
+let lastY=0;
+addEventListener("scroll",()=>{const y=scrollY,rail=document.getElementById("rail");if(!rail)return;
+ rail.classList.toggle("hide",y>lastY&&y>160);lastY=Math.max(0,y)},{passive:true});
+const SCENES=[sceneTitle,sceneRound,sceneWays,sceneData,sceneResults,sceneTheory];
+const seen=new Set();let io=null;
+function observe(){
+ if(!("IntersectionObserver" in window)){document.querySelectorAll(".sec").forEach(el=>el.classList.add("in"));return}
+ if(io)io.disconnect();
+ io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){const i=+e.target.id.slice(1);seen.add(i);S.sc=i;syncRail();e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12});
+ document.querySelectorAll(".sec:not(.in)").forEach(el=>io.observe(el));
+}
+/* keep the highlighted nav item in step with the section actually on screen */
+function syncRail(){document.querySelectorAll("#rail button").forEach(b=>b.classList.toggle("on",+b.dataset.sc===S.sc))}
+const spy=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){S.sc=+e.target.id.slice(1);syncRail()}}),{rootMargin:"-45% 0px -50% 0px"});
+function render(){const y=window.scrollY;
+ $("rail").innerHTML=`<b>Hierarchical FL</b>`+SC.map((t,i)=>`<button data-sc="${i}" class="${i===S.sc?"on":""}">${t}</button>`).join("");
+ $("main").innerHTML=SCENES.map((f,i)=>`<section id="s${i}" class="sec${seen.has(i)?" in":""}"><div class="wrap">${f()}</div></section>`).join("");
+ setHour();observe();spy.disconnect();document.querySelectorAll(".sec").forEach(el=>spy.observe(el));window.scrollTo(0,y)}
+function go(i){S.sc=Math.max(0,Math.min(LAST,i));history.replaceState(null,"","#"+S.sc);syncRail();
+ const el=document.getElementById("s"+S.sc);if(el){el.classList.add("in");seen.add(S.sc);el.scrollIntoView({behavior:"smooth",block:"start"})}}
+document.addEventListener("click",e=>{const t=e.target.closest("button");if(!t)return;const d=t.dataset;
+ if(d.sc!==undefined)return go(+d.sc);if(d.csv)return dlCSV();if(d.mode){S.mode=d.mode;return render()}if(d.fz){S.fz=d.fz;return render()}
+ if(d.play){S.play=!S.play;t.textContent=S.play?"Pause":"Play";return}
+ if(t.id==="pick")return $("f").click();if(d.reset)return resetBuiltIn();if(d.run)return startRun();
+ if(d.prep){S.clean={...preprocess(S.up,S.opt),name:S.up.name};return render()}if(d.use)return useCleaned();
+ if(d.dl){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([S.clean.csv],{type:"text/csv"}));a.download=S.clean.name.replace(/\.csv$/i,"")+"_preprocessed.csv";a.click();URL.revokeObjectURL(a.href)}});
+document.addEventListener("change",e=>{const el=e.target;if(el.id==="f"){handleCSV(el.files[0]);el.value="";return}
+ if(el.dataset.opt){const k=el.dataset.opt;S.opt[k]=el.type==="number"?(Number(el.value)>0?Number(el.value):3):el.value}});
+document.addEventListener("input",e=>{if(e.target.id==="hr"){S.hr=+e.target.value;S.play=false;const p=$("pl");if(p)p.textContent="Play";setHour()}});
+document.addEventListener("keydown",e=>{if(["INPUT","SELECT","TEXTAREA"].includes(e.target.tagName)||e.metaKey||e.ctrlKey)return;if(e.key==="ArrowRight")go(S.sc+1);if(e.key==="ArrowLeft")go(S.sc-1)});
+setPalette();S.sc=Math.max(0,Math.min(LAST,+location.hash.slice(1)||0));render();if(S.sc)setTimeout(()=>{const el=document.getElementById("s"+S.sc);if(el){el.classList.add("in");el.scrollIntoView()}},0);loadResults();loadZones();
+setInterval(()=>{loadResults();if(S.uploaded)loadStatus()},4000);setInterval(()=>{if(!S.zones&&!S.uploaded)loadZones()},15000);
+/* ---------- background: decorative traffic flow behind the interface (pauses if reduced motion) ---------- */
+const BG=document.getElementById("bgv"),bgx=BG.getContext("2d");
+const bgReduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+let bgW=0,bgH=0,bgLanes=[];
+function bgSize(){const k=Math.min(devicePixelRatio||1,2);bgW=BG.width=Math.round(innerWidth*k);bgH=BG.height=Math.round(innerHeight*k);
+ bgLanes=Array.from({length:30},(_,i)=>({horiz:i%2===0,pos:(i*0.137)%1,c:RC[i%4],s:.0008+Math.random()*.0018,p:Math.random(),len:.05+Math.random()*.1,dir:Math.random()<.5?1:-1,k}))}
+function carPath(x,y,w,h,r){bgx.beginPath();bgx.moveTo(x+r,y);bgx.arcTo(x+w,y,x+w,y+h,r);bgx.arcTo(x+w,y+h,x,y+h,r);bgx.arcTo(x,y+h,x,y,r);bgx.arcTo(x,y,x+w,y,r);bgx.closePath()}
+function drawCar(cx,cy,ang,L,W,col){const k=Math.min(devicePixelRatio||1,2);bgx.save();bgx.translate(cx,cy);bgx.rotate(ang);
+ bgx.globalAlpha=.85;bgx.fillStyle=col;carPath(-L/2,-W/2,L,W,W*.3);bgx.fill();
+ bgx.globalAlpha=.32;bgx.fillStyle="#23211E";carPath(L*.12,-W*.36,L*.22,W*.72,W*.12);bgx.fill();
+ bgx.globalAlpha=.85;bgx.fillStyle="#FFF8E6";bgx.beginPath();bgx.arc(L/2-k,-W*.3,1.6*k,0,7);bgx.arc(L/2-k,W*.3,1.6*k,0,7);bgx.fill();
+ bgx.restore()}
+function bgDraw(){bgx.clearRect(0,0,bgW,bgH);if(bgReduce)return;
+ const k=Math.min(devicePixelRatio||1,2);
+ bgx.strokeStyle="rgba(30,77,82,.13)";bgx.lineWidth=1;bgx.globalAlpha=1;
+ bgLanes.forEach(l=>{bgx.beginPath();if(l.horiz){const y=l.pos*bgH;bgx.moveTo(0,y);bgx.lineTo(bgW,y)}else{const x=l.pos*bgW;bgx.moveTo(x,0);bgx.lineTo(x,bgH)}bgx.stroke()});
+ bgLanes.forEach(l=>{l.p=((l.p+l.s*l.dir)%1+1)%1;
+  const x=l.horiz?l.p*bgW:l.pos*bgW,y=l.horiz?l.pos*bgH:l.p*bgH;
+  const ang=l.horiz?(l.dir>0?0:Math.PI):(l.dir>0?Math.PI/2:-Math.PI/2);
+  const size=.9+.2*((l.pos*7)%1);
+  drawCar(x,y,ang,26*k*size,12*k*size,l.c)});
+ bgx.globalAlpha=1}
+function bgLoop(){bgDraw();requestAnimationFrame(bgLoop)}
+addEventListener("resize",bgSize);bgSize();requestAnimationFrame(bgLoop);
+</script></body></html>

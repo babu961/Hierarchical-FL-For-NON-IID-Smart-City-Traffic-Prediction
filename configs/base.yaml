@@ -1,0 +1,41 @@
+seed: 42
+
+data:
+  path: data/traffic.csv
+  zone_col: zone_id
+  time_col: timestamp
+  target_col: traffic
+  freq_minutes: 15
+  input_len: 48              # 48 x 15 min = 12 h of history
+  pred_len: 4                # 4 x 15 min = 1 h forecast
+  train_ratio: 0.7
+  val_ratio: 0.1             # remaining 0.2 is test
+  use_time_features: true
+  min_zone_length: 500
+  normalization: standard    # standard | minmax | none
+  fill_method: interpolate   # interpolate | ffill | zero
+  resample_agg: mean         # mean | sum | max
+  train_stride: 1            # use every n-th training window
+
+model:
+  name: gru
+  hidden_size: 32
+  num_layers: 2
+  dropout: 0.1
+
+train:
+  batch_size: 256
+  lr: 0.001
+  local_epochs: 1
+  local_only_epochs: 5
+  device: auto               # auto | cpu | cuda
+
+fed:
+  rounds: 5
+  local_epochs: 1
+  mu: 0.01                   # FedProx strength; hierarchical uses the same mu
+  n_clusters: 4
+  global_every: 2
+  finetune_epochs: 2        # local epochs after federation (fedprox_ft)
+  # the comparison: centralized (upper bound), local-only (no sharing), FedProx (fair federated baseline), hierarchical
+  methods: [centralized, local_only, fedprox, hierarchical]

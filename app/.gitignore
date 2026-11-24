@@ -1,0 +1,11 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.idea/
+data/uploaded.csv
+*.bak
+*.builtin.bak
+results/results_uploaded.json
+results/results_builtin_backup.json
+*.pt
