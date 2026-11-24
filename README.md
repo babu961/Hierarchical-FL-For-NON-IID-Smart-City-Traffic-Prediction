@@ -47,7 +47,7 @@ pip install torch flask pandas pyyaml scikit-learn
    ```
    python app/app.py
    ```
-3. Open http://127.0.0.1:5001
+3. Open http://127.0.0.1:5000
 
 Each finished method appears on the Results page as soon as it completes.
 
