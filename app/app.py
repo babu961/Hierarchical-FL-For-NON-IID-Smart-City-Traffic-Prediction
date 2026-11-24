@@ -8,10 +8,10 @@ import io
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import threading
+from collections import deque
 from pathlib import Path
 
 import pandas as pd
@@ -23,15 +23,15 @@ ROOT = HERE.parent
 STATIC = HERE / "static"
 CONFIG = ROOT / "configs" / "base.yaml"
 UPLOAD = ROOT / "data" / "uploaded.csv"          # cleaned upload, in the config's column names
-RESULTS = ROOT / "results" / "results.json"      # what src.run_experiments writes
-RESULTS_BI = ROOT / "results" / "results_builtin_backup.json"
+RESULTS = ROOT / "results" / "results.json"      # built-in dataset results (never touched by uploads)
 RESULTS_UP = ROOT / "results" / "results_uploaded.json"
 
 app = Flask(__name__, static_folder=str(STATIC), static_url_path="/static")
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
 
-_run = {"state": "idle", "error": None}      # idle | running | done | error
+# idle | running | done | error. "log" holds the last lines the runner printed.
+_run = {"state": "idle", "error": None, "log": []}
 _lock = threading.Lock()
 
 
@@ -40,13 +40,9 @@ def load_cfg() -> dict:
 
 
 def data_target() -> Path:
-    """The CSV the experiment runner reads (from configs/base.yaml)."""
+    """The built-in CSV (from configs/base.yaml)."""
     p = Path(load_cfg()["data"]["path"])
     return p if p.is_absolute() else ROOT / p
-
-
-def backup_of(p: Path) -> Path:
-    return p.with_name(p.name + ".builtin.bak")
 
 
 def is_running() -> bool:
@@ -77,11 +73,11 @@ def _read_json(path: Path, missing_msg: str):
 
 @app.get("/api/results")
 def results():
+    # Each dataset has its own file, so a run on an upload never disturbs the built-in results.
+    # The runner saves after every method, so partial results are served while a run is going.
     if request.args.get("dataset") == "uploaded":
-        path = RESULTS if is_running() else RESULTS_UP   # live partial results while running
-        return _read_json(path, "No results for the uploaded dataset yet. Run the experiments on it.")
-    path = RESULTS_BI if is_running() else RESULTS
-    return _read_json(path, "No results yet. Run: python -m src.run_experiments")
+        return _read_json(RESULTS_UP, "No results for the uploaded dataset yet. Run the experiments on it.")
+    return _read_json(RESULTS, "No results yet. Run: python -m src.run_experiments")
 
 
 # ---------------------------------------------------------------- upload and run
@@ -116,46 +112,34 @@ def upload():
     UPLOAD.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(UPLOAD, index=False)
     RESULTS_UP.unlink(missing_ok=True)           # old results belong to the previous upload
-    _run.update(state="idle", error=None)
+    _run.update(state="idle", error=None, log=[])
     return jsonify({"ok": True, "rows": len(out)})
 
 
 def _do_run():
-    target = data_target()
-    bak = backup_of(target)
-    had_data = target.exists()
+    """Run the experiments on the upload. The runner is pointed at the upload and at its own
+    results file through environment variables, so the built-in data and results are never moved."""
+    tail = deque(maxlen=14)
     outcome = ("error", "unknown error")
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        RESULTS.parent.mkdir(parents=True, exist_ok=True)
-        if had_data:
-            shutil.copy2(target, bak)                    # back up the built-in data
-        if RESULTS.exists():
-            shutil.copy2(RESULTS, RESULTS_BI)            # and its results
-        RESULTS.unlink(missing_ok=True)
-        shutil.copy2(UPLOAD, target)                     # the runner reads this path
-        env = dict(os.environ, HFL_RESULTS=str(RESULTS), PYTHONUNBUFFERED="1")
-        p = subprocess.run([sys.executable, "-m", "src.run_experiments"],
-                           cwd=ROOT, env=env, capture_output=True, text=True)
-        if p.returncode == 0 and RESULTS.exists():
-            shutil.copy2(RESULTS, RESULTS_UP)
+        RESULTS_UP.parent.mkdir(parents=True, exist_ok=True)
+        RESULTS_UP.unlink(missing_ok=True)
+        env = dict(os.environ, HFL_DATA=str(UPLOAD), HFL_RESULTS=str(RESULTS_UP), PYTHONUNBUFFERED="1")
+        p = subprocess.Popen([sys.executable, "-m", "src.run_experiments"], cwd=ROOT, env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        for line in p.stdout:
+            line = line.rstrip()
+            if line:
+                tail.append(line)
+                _run["log"] = list(tail)         # the page shows this while the run is going
+        p.wait()
+        if p.returncode == 0 and RESULTS_UP.exists():
             outcome = ("done", None)
         else:
-            outcome = ("error", ((p.stderr or p.stdout) or "run failed")[-1500:])
+            outcome = ("error", "\n".join(tail)[-1500:] or "run failed")
     except Exception as e:
         outcome = ("error", str(e))
     finally:
-        # restore the built-in files BEFORE reporting the state
-        if had_data and bak.exists():
-            shutil.copy2(bak, target)
-            bak.unlink(missing_ok=True)
-        elif not had_data:
-            target.unlink(missing_ok=True)
-        if RESULTS_BI.exists():
-            shutil.copy2(RESULTS_BI, RESULTS)
-            RESULTS_BI.unlink(missing_ok=True)
-        else:
-            RESULTS.unlink(missing_ok=True)
         _run.update(state=outcome[0], error=outcome[1])
 
 
@@ -166,7 +150,7 @@ def run():
             return jsonify({"error": "A run is already in progress."}), 409
         if not UPLOAD.exists():
             return jsonify({"error": "Upload a CSV first."}), 400
-        _run.update(state="running", error=None)
+        _run.update(state="running", error=None, log=[])
     threading.Thread(target=_do_run, daemon=True).start()
     return jsonify({"ok": True})
 
@@ -234,14 +218,12 @@ def build_zones(path: Path):
 
     if not zones:
         raise ValueError("no zones found in the CSV")
-    return {"source": path.name.replace(".builtin.bak", ""), "zones": zones}
+    return {"source": path.name, "zones": zones}
 
 
 @app.get("/api/zones")
 def zones():
-    target = data_target()
-    # while a run has swapped the data file, read the backup of the built-in file
-    path = backup_of(target) if is_running() and backup_of(target).exists() else target
+    path = data_target()
     if not path.exists():
         return jsonify({"error": "No built-in dataset found. Upload a CSV on the previous page."}), 404
     try:
@@ -255,5 +237,6 @@ def zones():
 
 
 if __name__ == "__main__":
-    # use_reloader=False so a file change cannot restart the server mid-run
-    app.run(host="127.0.0.1", port=5001, debug=True, use_reloader=False)
+    # use_reloader=False so a file change cannot restart the server mid-run.
+    # Set HFL_DEBUG=1 to turn debug mode on while developing.
+    app.run(host="127.0.0.1", port=5001, debug=os.environ.get("HFL_DEBUG") == "1", use_reloader=False)

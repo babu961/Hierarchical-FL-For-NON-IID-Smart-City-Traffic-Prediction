@@ -2,7 +2,8 @@
 
     python -m src.run_experiments
 
-The environment variable HFL_RESULTS overrides the output path (the dashboard uses this).
+The environment variable HFL_RESULTS overrides the output path and HFL_DATA overrides the
+input CSV (the dashboard uses both, so it never has to swap files).
 
 Seeds: set  fed.seeds: [0, 1, 2]  in configs/base.yaml to repeat every method with several
 seeds. The saved numbers are then the mean over seeds, and each method also gets
@@ -74,6 +75,8 @@ def _run_one(name, cfg, zones, device, f, series, seed):
 def main(cfg_path: str = "configs/base.yaml", out_path: str | None = None):
     out_path = out_path or os.environ.get("HFL_RESULTS", "results/results.json")
     cfg = load_config(cfg_path)
+    if os.environ.get("HFL_DATA"):
+        cfg["data"]["path"] = os.environ["HFL_DATA"]
     f = fed_cfg(cfg)
     methods = cfg.get("fed", {}).get("methods", DEFAULT_METHODS)
     unknown = [m for m in methods if m not in ALL_METHODS]
@@ -132,8 +135,10 @@ def main(cfg_path: str = "configs/base.yaml", out_path: str | None = None):
 
         # save after every method so a long run is never lost
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-        with open(out_path, "w", encoding="utf-8") as fh:
+        tmp = out_path + ".tmp"                      # write then rename, so a reader never sees half a file
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(results, fh, indent=2)
+        os.replace(tmp, out_path)
 
     print("\nSummary (test split)")
     for name, res in results["methods"].items():
