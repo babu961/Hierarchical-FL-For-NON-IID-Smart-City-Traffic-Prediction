@@ -2,7 +2,7 @@
 
 Run from the project root:
     python app/app.py
-then open http://127.0.0.1:5001
+then open http://127.0.0.1:5000
 """
 import io
 import json
@@ -239,4 +239,7 @@ def zones():
 if __name__ == "__main__":
     # use_reloader=False so a file change cannot restart the server mid-run.
     # Set HFL_DEBUG=1 to turn debug mode on while developing.
-    app.run(host="127.0.0.1", port=5001, debug=os.environ.get("HFL_DEBUG") == "1", use_reloader=False)
+    import os
+
+    if __name__ == "__main__":
+        app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
