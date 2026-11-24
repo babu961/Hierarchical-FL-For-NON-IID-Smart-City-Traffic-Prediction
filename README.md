@@ -1,4 +1,6 @@
 # Hierarchical Federated Learning for Non-IID Smart-City Traffic Prediction
+a live demo link:
+      https://hierarchical-fl-for-non-iid-smart-city.onrender.com/
 
 Smart-city traffic differs from road to road: each zone peaks at a different hour, so the data is **non-IID**. This project forecasts traffic for every zone **without pooling the raw records**. Each zone trains locally and shares only model weights. Zones with similar daily rhythms are grouped into clusters, and each cluster learns its own model (hierarchical federated learning).
 
